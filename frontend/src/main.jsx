@@ -7,7 +7,6 @@ import {
   ScanLine,
   FileText,
   Settings,
-  Terminal,
   Menu,
   X,
   Plus,
@@ -17,8 +16,15 @@ import {
   Download,
   RefreshCw,
   Server,
-  Search
+  Search,
+  LogOut,
+  Activity,
+  Zap,
+  Globe,
+  Bug,
+  Loader2
 } from "lucide-react";
+
 import { api, BASE } from "./services/api";
 import "./index.css";
 
@@ -39,31 +45,104 @@ const sevColor = {
   Info: "text-slate-400"
 };
 
-function App() {
+/* =========================================================
+   FIXED LOCAL LOGIN
+   Username: Nexo
+   Password: admin
+   ========================================================= */
+
+const LOGIN_USER = "Nexo";
+const LOGIN_PASS = "admin";
+const LOCAL_SESSION = "nexo_local_session";
+
+function Root() {
+  const [logged, setLogged] = useState(
+    localStorage.getItem(LOCAL_SESSION) === "1"
+  );
+
+  if (!logged) {
+    return (
+      <Auth
+        onLogin={() => {
+          localStorage.setItem(LOCAL_SESSION, "1");
+          setLogged(true);
+        }}
+      />
+    );
+  }
+
+  return (
+    <App
+      onLogout={() => {
+        localStorage.removeItem(LOCAL_SESSION);
+        localStorage.removeItem("nexo_token");
+        location.reload();
+      }}
+    />
+  );
+}
+
+/* =========================================================
+   MAIN APP
+   ========================================================= */
+
+function App({ onLogout }) {
   const [page, setPage] = useState("Dashboard");
+
   const [targets, setTargets] = useState([]);
   const [scans, setScans] = useState([]);
   const [findings, setFindings] = useState([]);
   const [catalog, setCatalog] = useState([]);
+
   const [mobile, setMobile] = useState(false);
   const [modal, setModal] = useState(false);
+
   const [toast, setToast] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const load = async () => {
     try {
-      const [t, s, f, c] = await Promise.all([
+      setLoading(true);
+
+      const results = await Promise.allSettled([
         api("/api/targets"),
         api("/api/scans"),
         api("/api/findings"),
         api("/api/scanner-catalog")
       ]);
 
-      setTargets(Array.isArray(t) ? t : []);
-      setScans(Array.isArray(s) ? s : []);
-      setFindings(Array.isArray(f) ? f : []);
-      setCatalog(Array.isArray(c) ? c : []);
+      if (results[0].status === "fulfilled") {
+        setTargets(Array.isArray(results[0].value) ? results[0].value : []);
+      }
+
+      if (results[1].status === "fulfilled") {
+        setScans(Array.isArray(results[1].value) ? results[1].value : []);
+      }
+
+      if (results[2].status === "fulfilled") {
+        setFindings(
+          Array.isArray(results[2].value) ? results[2].value : []
+        );
+      }
+
+      if (results[3].status === "fulfilled") {
+        setCatalog(
+          Array.isArray(results[3].value) ? results[3].value : []
+        );
+      }
+
+      const failed = results.find((x) => x.status === "rejected");
+
+      if (failed) {
+        setToast(
+          failed.reason?.message ||
+            "Some API data could not be loaded."
+        );
+      }
     } catch (e) {
-      setToast(e.message || "Unable to load API data.");
+      setToast(e?.message || "Unable to load application data.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -72,7 +151,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const id = setInterval(load, 3000);
+    const id = setInterval(load, 5000);
+
     return () => clearInterval(id);
   }, []);
 
@@ -81,7 +161,7 @@ function App() {
 
     const id = setTimeout(() => {
       setToast("");
-    }, 4000);
+    }, 4500);
 
     return () => clearTimeout(id);
   }, [toast]);
@@ -89,6 +169,7 @@ function App() {
   return (
     <div className="min-h-screen flex">
 
+      {/* SIDEBAR */}
       <aside
         className={`${
           mobile
@@ -99,11 +180,12 @@ function App() {
         <div className="p-5 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-[#00FF9C] text-black grid place-items-center">
-              <ShieldCheck />
+              <ShieldCheck size={22} />
             </div>
 
             <div>
               <b>NEXO</b>
+
               <div className="text-[10px] text-slate-500 tracking-[.22em]">
                 BUG HUNTER
               </div>
@@ -111,28 +193,31 @@ function App() {
           </div>
 
           {mobile && (
-            <button onClick={() => setMobile(false)}>
-              <X />
+            <button
+              className="btn"
+              onClick={() => setMobile(false)}
+            >
+              <X size={18} />
             </button>
           )}
         </div>
 
         <div className="px-3 space-y-1">
-          {NAV.map(([n, I]) => (
+          {NAV.map(([name, Icon]) => (
             <button
-              key={n}
+              key={name}
               onClick={() => {
-                setPage(n);
+                setPage(name);
                 setMobile(false);
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm ${
-                page === n
+                page === name
                   ? "bg-[#0d1b17] text-[#00FF9C]"
                   : "text-slate-400 hover:bg-[#0d1318]"
               }`}
             >
-              <I size={17} />
-              {n}
+              <Icon size={17} />
+              {name}
             </button>
           ))}
         </div>
@@ -140,49 +225,85 @@ function App() {
         <div className="mt-auto p-4">
           <div className="panel p-3">
             <div className="flex justify-between text-xs">
-              <span className="text-slate-500">SECURITY ENGINE</span>
-              <span className="text-[#00FF9C]">ONLINE</span>
+              <span className="text-slate-500">
+                SECURITY ENGINE
+              </span>
+
+              <span className="text-[#00FF9C]">
+                ONLINE
+              </span>
             </div>
 
             <div className="mono text-[10px] text-slate-600 mt-2">
-              Evidence-backed mode
+              Automatic assessment mode
+            </div>
+
+            <div className="mono text-[10px] text-slate-600 mt-1">
+              Target → Scan → Findings
             </div>
           </div>
         </div>
       </aside>
 
+      {/* MAIN */}
       <main className="flex-1 min-w-0">
 
+        {/* HEADER */}
         <header className="h-16 border-b border-[#18232d] bg-[#070b0fe8] backdrop-blur sticky top-0 z-20 flex items-center justify-between px-4 md:px-7">
 
-          <button
-            className="md:hidden btn"
-            onClick={() => setMobile(true)}
-          >
-            <Menu size={18} />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              className="md:hidden btn"
+              onClick={() => setMobile(true)}
+            >
+              <Menu size={18} />
+            </button>
 
-          <div>
-            <div className="font-semibold">{page}</div>
+            <div>
+              <div className="font-semibold">
+                {page}
+              </div>
 
-            <div className="mono text-[10px] text-slate-500">
-              Automated Web Security Intelligence
+              <div className="mono text-[10px] text-slate-500">
+                Automated Web Security Intelligence
+              </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
+
             <span className="hidden sm:flex items-center gap-2 text-xs text-slate-400">
               <i className="w-2 h-2 rounded-full bg-[#00FF9C] shadow-[0_0_10px_#00FF9C]" />
               API operational
             </span>
-          </div>
 
+            <button
+              className="btn"
+              title="Refresh"
+              onClick={load}
+            >
+              <RefreshCw
+                size={15}
+                className={loading ? "animate-spin" : ""}
+              />
+            </button>
+
+            <button
+              className="btn"
+              title="Logout"
+              onClick={onLogout}
+            >
+              <LogOut size={15} />
+            </button>
+
+          </div>
         </header>
 
+        {/* CONTENT */}
         <div className="p-4 md:p-7 max-w-[1550px] mx-auto">
 
           {toast && (
-            <div className="fixed top-20 right-4 z-50 panel p-3 text-sm border-red-50033 text-red-200">
+            <div className="fixed top-20 right-4 z-50 panel p-3 text-sm border border-red-500/30 text-red-200 max-w-sm">
               {toast}
             </div>
           )}
@@ -203,6 +324,7 @@ function App() {
               reload={load}
               modal={modal}
               setModal={setModal}
+              setToast={setToast}
             />
           )}
 
@@ -211,14 +333,12 @@ function App() {
               targets={targets}
               scans={scans}
               reload={load}
-              catalog={catalog}
             />
           )}
 
           {page === "Findings" && (
             <Findings
               findings={findings}
-              reload={load}
             />
           )}
 
@@ -236,6 +356,10 @@ function App() {
   );
 }
 
+/* =========================================================
+   STAT
+   ========================================================= */
+
 function Stat({
   label,
   value,
@@ -248,7 +372,9 @@ function Stat({
         {label}
       </div>
 
-      <div className={`text-3xl font-semibold mt-2 ${color}`}>
+      <div
+        className={`text-3xl font-semibold mt-2 ${color}`}
+      >
         {value}
       </div>
 
@@ -260,6 +386,10 @@ function Stat({
     </div>
   );
 }
+
+/* =========================================================
+   DASHBOARD
+   ========================================================= */
 
 function Dashboard({
   targets,
@@ -283,6 +413,13 @@ function Dashboard({
     [findings]
   );
 
+  const running = scans.filter(
+    (s) =>
+      s.status === "running" ||
+      s.status === "queued" ||
+      s.status === "pending"
+  ).length;
+
   return (
     <div className="grid-bg rounded-2xl p-1">
 
@@ -298,22 +435,22 @@ function Dashboard({
           </h1>
 
           <p className="text-slate-500 text-sm mt-1">
-            Real telemetry from authorized assessment jobs.
-            No synthetic findings.
+            Add an authorized target and NEXO automatically starts the assessment.
           </p>
         </div>
 
         <button
-          onClick={() => go("Scans")}
+          onClick={() => go("Targets")}
           className="btn btn-primary flex items-center gap-2 w-fit"
         >
-          <Play size={16} />
-          New assessment
+          <Plus size={16} />
+          Add target
         </button>
 
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+
         <Stat
           label="Assets monitored"
           value={targets.length}
@@ -322,6 +459,12 @@ function Dashboard({
         <Stat
           label="Total scans"
           value={scans.length}
+        />
+
+        <Stat
+          label="Running scans"
+          value={running}
+          color="text-[#00FF9C]"
         />
 
         <Stat
@@ -339,11 +482,6 @@ function Dashboard({
           color="text-red-400"
         />
 
-        <Stat
-          label="High"
-          value={sev.High}
-          color="text-orange-400"
-        />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
@@ -356,13 +494,13 @@ function Dashboard({
               <b>Recent scan activity</b>
 
               <div className="text-xs text-slate-500 mt-1">
-                Live job state
+                Automatic assessment jobs
               </div>
             </div>
 
             <button
               className="btn"
-              onClick={loadPage}
+              onClick={() => location.reload()}
             >
               <RefreshCw size={15} />
             </button>
@@ -374,15 +512,16 @@ function Dashboard({
               key={s.id}
               className="mb-4"
             >
-
               <div className="flex justify-between text-sm">
 
                 <span className="mono">
-                  SCAN-{String(s.id).padStart(4, "0")}
+                  SCAN-
+                  {String(s.id).padStart(4, "0")}
                 </span>
 
                 <span className="text-slate-500">
-                  {s.current_stage} · {s.progress}%
+                  {s.current_stage || "Processing"} ·{" "}
+                  {Number(s.progress || 0)}%
                 </span>
 
               </div>
@@ -392,17 +531,22 @@ function Dashboard({
                 <div
                   className="h-full bg-[#00FF9C] transition-all"
                   style={{
-                    width: `${s.progress || 0}%`
+                    width: `${Math.min(
+                      100,
+                      Math.max(
+                        0,
+                        Number(s.progress || 0)
+                      )
+                    )}%`
                   }}
                 />
 
               </div>
-
             </div>
           ))}
 
           {!scans.length && (
-            <Empty text="No assessment jobs yet." />
+            <Empty text="No assessment jobs yet. Add a target to start automatically." />
           )}
 
         </div>
@@ -414,17 +558,21 @@ function Dashboard({
           <div className="space-y-3 mt-5">
 
             {Object.entries(sev).map(
-              ([s, n]) => (
-                <div key={s}>
+              ([severity, count]) => (
+                <div key={severity}>
 
                   <div className="flex justify-between text-xs mb-1">
 
-                    <span className={sevColor[s]}>
-                      {s}
+                    <span
+                      className={
+                        sevColor[severity]
+                      }
+                    >
+                      {severity}
                     </span>
 
                     <span className="text-slate-500">
-                      {n}
+                      {count}
                     </span>
 
                   </div>
@@ -433,13 +581,13 @@ function Dashboard({
 
                     <div
                       className={`h-full rounded ${
-                        s === "Critical"
+                        severity === "Critical"
                           ? "bg-red-400"
-                          : s === "High"
+                          : severity === "High"
                           ? "bg-orange-400"
-                          : s === "Medium"
+                          : severity === "Medium"
                           ? "bg-yellow-300"
-                          : s === "Low"
+                          : severity === "Low"
                           ? "bg-blue-300"
                           : "bg-slate-500"
                       }`}
@@ -448,7 +596,7 @@ function Dashboard({
                           findings.length
                             ? Math.max(
                                 4,
-                                (n /
+                                (count /
                                   findings.length) *
                                   100
                               )
@@ -458,31 +606,30 @@ function Dashboard({
                     />
 
                   </div>
+
                 </div>
               )
             )}
 
           </div>
-        </div>
 
+        </div>
       </div>
+
     </div>
   );
 }
 
-/*
-  Small helper used by Dashboard refresh.
-  Reloading the page is avoided.
-*/
-function loadPage() {
-  window.location.reload();
-}
+/* =========================================================
+   TARGETS
+   ========================================================= */
 
 function Targets({
   targets,
   reload,
   modal,
-  setModal
+  setModal,
+  setToast
 }) {
   return (
     <>
@@ -494,7 +641,7 @@ function Targets({
           </h2>
 
           <p className="text-sm text-slate-500">
-            Ownership and explicit authorization are enforced.
+            Add an authorized target. Assessment starts automatically.
           </p>
         </div>
 
@@ -512,6 +659,7 @@ function Targets({
         <TargetModal
           close={() => setModal(false)}
           reload={reload}
+          setToast={setToast}
         />
       )}
 
@@ -520,14 +668,14 @@ function Targets({
         <table className="w-full text-sm">
 
           <thead className="text-xs text-slate-500">
-
             <tr>
               {[
                 "Name",
                 "Target",
                 "Scope",
                 "Authorization",
-                "Created"
+                "Created",
+                "Status"
               ].map((h) => (
                 <th
                   key={h}
@@ -537,7 +685,6 @@ function Targets({
                 </th>
               ))}
             </tr>
-
           </thead>
 
           <tbody>
@@ -557,12 +704,15 @@ function Targets({
                 </td>
 
                 <td className="p-4 text-slate-400">
-                  {t.scope || "Default target scope"}
+                  {t.scope ||
+                    "Default target scope"}
                 </td>
 
-                <td className="p-4 text-[#00FF9C] flex items-center gap-1">
-                  <CheckCircle2 size={14} />
-                  Confirmed
+                <td className="p-4 text-[#00FF9C]">
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 size={14} />
+                    Confirmed
+                  </span>
                 </td>
 
                 <td className="p-4 text-slate-500">
@@ -570,7 +720,13 @@ function Targets({
                     ? new Date(
                         t.created_at
                       ).toLocaleDateString()
-                    : "-"}
+                    : "—"}
+                </td>
+
+                <td className="p-4">
+                  <span className="text-[#00FF9C] text-xs">
+                    AUTO SCAN
+                  </span>
                 </td>
 
               </tr>
@@ -581,7 +737,7 @@ function Targets({
         </table>
 
         {!targets.length && (
-          <Empty text="No authorized assets." />
+          <Empty text="No authorized assets. Add your first target." />
         )}
 
       </div>
@@ -589,9 +745,14 @@ function Targets({
   );
 }
 
+/* =========================================================
+   TARGET MODAL
+   ========================================================= */
+
 function TargetModal({
   close,
-  reload
+  reload,
+  setToast
 }) {
   const [f, setF] = useState({
     name: "",
@@ -604,23 +765,135 @@ function TargetModal({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
+  const update = (key, value) => {
+    setF((old) => ({
+      ...old,
+      [key]: value
+    }));
+  };
+
   const save = async () => {
+    setErr("");
+
+    if (!f.name.trim()) {
+      setErr("Asset name is required.");
+      return;
+    }
+
+    if (!f.target.trim()) {
+      setErr("Target URL is required.");
+      return;
+    }
+
+    if (!f.authorization_confirmed) {
+      setErr(
+        "Authorization confirmation is required."
+      );
+      return;
+    }
+
     try {
       setBusy(true);
-      setErr("");
 
-      await api("/api/targets", {
-        method: "POST",
-        body: JSON.stringify(f)
-      });
+      /*
+       * STEP 1:
+       * Create target
+       */
+      const created = await api(
+        "/api/targets",
+        {
+          method: "POST",
+          body: JSON.stringify(f)
+        }
+      );
+
+      /*
+       * STEP 2:
+       * Automatically start scan
+       *
+       * Backend may return:
+       * { id: 123 }
+       * or { target_id: 123 }
+       */
+      const targetId =
+        created?.id ||
+        created?.target_id;
+
+      if (!targetId) {
+        throw new Error(
+          "Target created, but backend did not return target ID."
+        );
+      }
+
+      /*
+       * STEP 3:
+       * Get enabled scanners
+       */
+      let scanners = [];
+
+      try {
+        const catalog =
+          await api(
+            "/api/scanner-catalog"
+          );
+
+        if (Array.isArray(catalog)) {
+          scanners = catalog
+            .filter(
+              (scanner) =>
+                scanner.enabled !== false
+            )
+            .map(
+              (scanner) =>
+                scanner.name
+            )
+            .filter(Boolean);
+        }
+      } catch {
+        /*
+         * Fallback scanners.
+         */
+        scanners = [
+          "headers",
+          "technology"
+        ];
+      }
+
+      if (!scanners.length) {
+        scanners = [
+          "headers",
+          "technology"
+        ];
+      }
+
+      /*
+       * STEP 4:
+       * Automatic assessment
+       */
+      await api(
+        "/api/scans",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            target_id: Number(targetId),
+            profile: "Standard",
+            scanners
+          })
+        }
+      );
 
       close();
-      reload();
+
+      await reload();
+
+      setToast(
+        "Target added. Automatic security assessment started."
+      );
 
     } catch (e) {
       setErr(
-        e.message ||
-        "Unable to create target."
+        e?.message ||
+          "Unable to add target."
       );
     } finally {
       setBusy(false);
@@ -640,7 +913,7 @@ function TargetModal({
             </h3>
 
             <p className="text-xs text-slate-500 mt-1">
-              Only test assets you are authorized to assess.
+              Adding the target automatically starts NEXO assessment.
             </p>
           </div>
 
@@ -651,7 +924,7 @@ function TargetModal({
         </div>
 
         {err && (
-          <div className="text-red-300 text-sm mt-3">
+          <div className="text-red-300 text-sm mt-4 border border-red-500/20 bg-red-500/5 rounded-lg p-3">
             {err}
           </div>
         )}
@@ -662,10 +935,7 @@ function TargetModal({
             placeholder="Asset name"
             value={f.name}
             onChange={(e) =>
-              setF({
-                ...f,
-                name: e.target.value
-              })
+              update("name", e.target.value)
             }
           />
 
@@ -673,10 +943,10 @@ function TargetModal({
             placeholder="https://example.com"
             value={f.target}
             onChange={(e) =>
-              setF({
-                ...f,
-                target: e.target.value
-              })
+              update(
+                "target",
+                e.target.value
+              )
             }
           />
 
@@ -685,10 +955,10 @@ function TargetModal({
             placeholder="Scope / allowed paths / exclusions"
             value={f.scope}
             onChange={(e) =>
-              setF({
-                ...f,
-                scope: e.target.value
-              })
+              update(
+                "scope",
+                e.target.value
+              )
             }
           />
 
@@ -697,10 +967,10 @@ function TargetModal({
             placeholder="Notes"
             value={f.notes}
             onChange={(e) =>
-              setF({
-                ...f,
-                notes: e.target.value
-              })
+              update(
+                "notes",
+                e.target.value
+              )
             }
           />
 
@@ -709,13 +979,14 @@ function TargetModal({
             <input
               type="checkbox"
               className="w-4 mt-1"
-              checked={f.authorization_confirmed}
+              checked={
+                f.authorization_confirmed
+              }
               onChange={(e) =>
-                setF({
-                  ...f,
-                  authorization_confirmed:
-                    e.target.checked
-                })
+                update(
+                  "authorization_confirmed",
+                  e.target.checked
+                )
               }
             />
 
@@ -732,6 +1003,7 @@ function TargetModal({
           <button
             className="btn"
             onClick={close}
+            disabled={busy}
           >
             Cancel
           </button>
@@ -739,14 +1011,25 @@ function TargetModal({
           <button
             disabled={
               !f.authorization_confirmed ||
-              busy ||
-              !f.name ||
-              !f.target
+              busy
             }
-            className="btn btn-primary disabled:opacity-40"
+            className="btn btn-primary disabled:opacity-40 flex items-center gap-2"
             onClick={save}
           >
-            {busy ? "Saving…" : "Save target"}
+            {busy ? (
+              <>
+                <Loader2
+                  size={15}
+                  className="animate-spin"
+                />
+                Starting scan…
+              </>
+            ) : (
+              <>
+                <Zap size={15} />
+                Add & Scan
+              </>
+            )}
           </button>
 
         </div>
@@ -756,48 +1039,66 @@ function TargetModal({
   );
 }
 
+/* =========================================================
+   SCANS
+   ========================================================= */
+
 function Scans({
   targets,
   scans,
-  reload,
-  catalog
+  reload
 }) {
-  const [target, setTarget] = useState("");
-  const [profile, setProfile] = useState("Quick");
-  const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const active = catalog.filter(
-    (x) =>
-      x.name === "headers" ||
-      x.name === "technology"
-  );
-
-  const run = async () => {
+  const runAgain = async (targetId) => {
     try {
       setBusy(true);
       setErr("");
 
-      const scanners = selected.length
-        ? selected
-        : ["headers", "technology"];
+      let scanners = [
+        "headers",
+        "technology"
+      ];
 
-      await api("/api/scans", {
-        method: "POST",
-        body: JSON.stringify({
-          target_id: Number(target),
-          profile,
-          scanners
-        })
-      });
+      try {
+        const catalog =
+          await api(
+            "/api/scanner-catalog"
+          );
 
-      reload();
+        if (Array.isArray(catalog)) {
+          const enabled = catalog
+            .filter(
+              (x) => x.enabled !== false
+            )
+            .map((x) => x.name)
+            .filter(Boolean);
+
+          if (enabled.length) {
+            scanners = enabled;
+          }
+        }
+      } catch {}
+
+      await api(
+        "/api/scans",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            target_id: Number(targetId),
+            profile: "Standard",
+            scanners
+          })
+        }
+      );
+
+      await reload();
 
     } catch (e) {
       setErr(
-        e.message ||
-        "Unable to start scan."
+        e?.message ||
+          "Unable to start scan."
       );
     } finally {
       setBusy(false);
@@ -806,194 +1107,162 @@ function Scans({
 
   return (
     <>
-      <div className="grid lg:grid-cols-[1.2fr_.8fr] gap-4 mb-5">
+      <div className="flex justify-between items-center mb-5">
 
-        <div className="panel p-5">
+        <div>
+          <h2 className="text-xl font-semibold">
+            Automatic Scans
+          </h2>
 
-          <div className="flex items-center gap-2 mb-4">
-            <ScanLine
-              size={18}
-              className="text-[#00FF9C]"
-            />
-            <b>Create assessment job</b>
-          </div>
-
-          <div className="space-y-3">
-
-            <select
-              value={target}
-              onChange={(e) =>
-                setTarget(e.target.value)
-              }
-            >
-              <option value="">
-                Select authorized target
-              </option>
-
-              {targets.map((t) => (
-                <option
-                  key={t.id}
-                  value={t.id}
-                >
-                  {t.name} — {t.target}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={profile}
-              onChange={(e) =>
-                setProfile(e.target.value)
-              }
-            >
-              <option>Quick</option>
-              <option>Standard</option>
-              <option>Deep</option>
-            </select>
-
-            <div className="grid sm:grid-cols-2 gap-2">
-
-              {active.map((s) => (
-                <label
-                  key={s.name}
-                  className="border border-[#18232d] rounded-lg p-3 text-xs flex gap-2"
-                >
-
-                  <input
-                    type="checkbox"
-                    className="w-4"
-                    checked={selected.includes(
-                      s.name
-                    )}
-                    onChange={(e) =>
-                      setSelected(
-                        e.target.checked
-                          ? [
-                              ...selected,
-                              s.name
-                            ]
-                          : selected.filter(
-                              (x) =>
-                                x !== s.name
-                            )
-                      )
-                    }
-                  />
-
-                  <span>
-                    <b>{s.name}</b>
-                    <br />
-
-                    <span className="text-slate-500">
-                      {s.description}
-                    </span>
-                  </span>
-
-                </label>
-              ))}
-
-            </div>
-
-            {err && (
-              <div className="text-red-300 text-sm">
-                {err}
-              </div>
-            )}
-
-            <button
-              disabled={!target || busy}
-              className="btn btn-primary w-full disabled:opacity-40 flex justify-center gap-2"
-              onClick={run}
-            >
-              <Play size={15} />
-              {busy
-                ? "Starting…"
-                : "Start authorized scan"}
-            </button>
-
-          </div>
+          <p className="text-sm text-slate-500">
+            NEXO automatically scans targets after they are added.
+          </p>
         </div>
 
-        <div className="panel p-5">
+        <div className="flex items-center gap-2 text-xs text-[#00FF9C]">
+          <Activity size={14} />
+          AUTO MODE
+        </div>
 
-          <b>Pipeline</b>
+      </div>
 
-          <div className="mono text-xs mt-4 space-y-3 text-slate-400">
+      {err && (
+        <div className="panel p-3 mb-4 text-red-300 text-sm">
+          {err}
+        </div>
+      )}
 
-            {[
-              "Target validation",
-              "HTTP discovery",
-              "Technology detection",
-              "Passive checks",
-              "OWASP testing",
-              "Finding normalization",
-              "Report generation"
-            ].map((x, i) => (
+      <div className="panel p-5 mb-4">
+
+        <div className="flex items-center gap-2 mb-4">
+          <ScanLine
+            size={18}
+            className="text-[#00FF9C]"
+          />
+          <b>Authorized targets</b>
+        </div>
+
+        {!targets.length ? (
+          <Empty text="No targets available. Add a target first." />
+        ) : (
+          <div className="space-y-2">
+
+            {targets.map((target) => (
               <div
-                className="flex gap-2"
-                key={x}
+                key={target.id}
+                className="border border-[#18232d] rounded-lg p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
               >
-                <span className="text-[#00FF9C]">
-                  [{i < 2 ? "✓" : " "}]
-                </span>
-                {x}
+
+                <div>
+                  <div className="font-medium">
+                    {target.name}
+                  </div>
+
+                  <div className="mono text-xs text-slate-500 mt-1">
+                    {target.target}
+                  </div>
+                </div>
+
+                <button
+                  className="btn btn-primary flex items-center justify-center gap-2"
+                  disabled={busy}
+                  onClick={() =>
+                    runAgain(target.id)
+                  }
+                >
+                  {busy ? (
+                    <Loader2
+                      size={15}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <Play size={15} />
+                  )}
+
+                  Scan again
+                </button>
+
               </div>
             ))}
 
           </div>
-        </div>
+        )}
 
       </div>
 
       <div className="panel p-5">
 
         <div className="flex justify-between mb-4">
-          <b>Scan queue</b>
+
+          <div>
+            <b>Scan queue</b>
+
+            <div className="text-xs text-slate-500 mt-1">
+              Live assessment state
+            </div>
+          </div>
 
           <span className="text-xs text-slate-500">
             {scans.length} jobs
           </span>
+
         </div>
 
-        {scans.map((s) => (
-          <div
-            key={s.id}
-            className="border border-[#18232d] rounded-lg p-4 mb-3"
-          >
+        {scans.map((s) => {
 
-            <div className="flex justify-between">
+          const progress = Math.min(
+            100,
+            Math.max(
+              0,
+              Number(s.progress || 0)
+            )
+          );
 
-              <span className="mono text-xs">
-                SCAN-
-                {String(s.id).padStart(4, "0")}
-              </span>
+          return (
+            <div
+              key={s.id}
+              className="border border-[#18232d] rounded-lg p-4 mb-3"
+            >
 
-              <span className="text-xs text-slate-400">
-                {s.status}
-              </span>
+              <div className="flex justify-between">
+
+                <span className="mono text-xs">
+                  SCAN-
+                  {String(s.id).padStart(4, "0")}
+                </span>
+
+                <span className="text-xs text-slate-400">
+                  {s.status || "unknown"}
+                </span>
+
+              </div>
+
+              <div className="text-xs text-slate-500 mt-2">
+                {s.current_stage ||
+                  "Processing"}
+              </div>
+
+              <div className="h-1.5 bg-[#111a21] rounded mt-2">
+
+                <div
+                  className="h-full bg-[#00FF9C] rounded transition-all"
+                  style={{
+                    width: `${progress}%`
+                  }}
+                />
+
+              </div>
+
+              <div className="text-[10px] text-slate-600 mt-2">
+                {progress}% complete
+              </div>
 
             </div>
-
-            <div className="text-xs text-slate-500 mt-2">
-              {s.current_stage}
-            </div>
-
-            <div className="h-1.5 bg-[#111a21] rounded mt-2">
-
-              <div
-                className="h-full bg-[#00FF9C] rounded transition-all"
-                style={{
-                  width: `${s.progress || 0}%`
-                }}
-              />
-
-            </div>
-
-          </div>
-        ))}
+          );
+        })}
 
         {!scans.length && (
-          <Empty text="No jobs queued." />
+          <Empty text="No scan jobs yet." />
         )}
 
       </div>
@@ -1001,17 +1270,17 @@ function Scans({
   );
 }
 
-function Findings({
-  findings,
-  reload
-}) {
+/* =========================================================
+   FINDINGS
+   ========================================================= */
+
+function Findings({ findings }) {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
 
   const filtered = findings.filter(
     (f) =>
-      (
-        !q ||
+      (!q ||
         [
           f.title,
           f.target,
@@ -1019,8 +1288,7 @@ function Findings({
         ]
           .join(" ")
           .toLowerCase()
-          .includes(q.toLowerCase())
-      ) &&
+          .includes(q.toLowerCase())) &&
       (!status || f.status === status)
   );
 
@@ -1075,11 +1343,10 @@ function Findings({
               "Fixed",
               "Accepted Risk"
             ].map((x) => (
-              <option key={x}>
+              <option key={x} value={x}>
                 {x}
               </option>
             ))}
-
           </select>
 
         </div>
@@ -1129,23 +1396,23 @@ function Findings({
                     "text-slate-400"
                   }`}
                 >
-                  {f.severity}
+                  {f.severity || "Info"}
                 </td>
 
                 <td className="p-4 text-slate-400">
-                  {f.confidence}
+                  {f.confidence || "—"}
                 </td>
 
                 <td className="p-4 text-slate-400">
-                  {f.owasp_category}
+                  {f.owasp_category || "—"}
                 </td>
 
                 <td className="p-4 mono text-xs">
-                  {f.target}
+                  {f.target || "—"}
                 </td>
 
                 <td className="p-4">
-                  {f.status}
+                  {f.status || "Open"}
                 </td>
 
               </tr>
@@ -1164,27 +1431,34 @@ function Findings({
   );
 }
 
-function Reports({
-  findings
-}) {
+/* =========================================================
+   REPORTS
+   ========================================================= */
+
+function Reports({ findings }) {
+
   const download = async (ext) => {
     try {
       const token =
-        localStorage.getItem("nexo_token");
+        localStorage.getItem(
+          "nexo_token"
+        );
+
+      const headers = {};
+
+      if (token) {
+        headers.Authorization =
+          `Bearer ${token}`;
+      }
 
       const response = await fetch(
         `${BASE}/api/exports/findings.${ext}`,
-        {
-          headers: {
-            Authorization:
-              `Bearer ${token}`
-          }
-        }
+        { headers }
       );
 
       if (!response.ok) {
         throw new Error(
-          "Export request failed."
+          `Export failed (${response.status})`
         );
       }
 
@@ -1208,7 +1482,10 @@ function Reports({
       URL.revokeObjectURL(url);
 
     } catch (e) {
-      console.error(e);
+      alert(
+        e?.message ||
+          "Export failed."
+      );
     }
   };
 
@@ -1218,19 +1495,14 @@ function Reports({
       <div className="panel p-5 lg:col-span-2">
 
         <div className="flex gap-2 items-center">
-
           <FileText
             className="text-[#00FF9C]"
           />
-
           <b>Report center</b>
-
         </div>
 
         <p className="text-sm text-slate-500 mt-2">
           Export current stored findings.
-          Full PDF generation can be attached
-          to completed report jobs.
         </p>
 
         <div className="flex flex-wrap gap-2 mt-5">
@@ -1256,6 +1528,7 @@ function Reports({
           </button>
 
         </div>
+
       </div>
 
       <div className="panel p-5">
@@ -1276,33 +1549,52 @@ function Reports({
   );
 }
 
-function System({
-  catalog
-}) {
+/* =========================================================
+   SYSTEM
+   ========================================================= */
+
+function System({ catalog }) {
   return (
     <div className="grid md:grid-cols-2 gap-4">
 
       <div className="panel p-5">
 
         <div className="flex items-center gap-2">
-
           <Server
             className="text-[#00FF9C]"
           />
-
           <b>Platform health</b>
-
         </div>
 
         <div className="space-y-2 text-sm text-slate-400 mt-5">
 
-          <p>✓ Authentication enabled</p>
-          <p>✓ Target ownership enforced</p>
-          <p>✓ Authorization gate enabled</p>
-          <p>✓ Rate limiting enabled</p>
-          <p>✓ SSRF destination filtering</p>
-          <p>✓ Generic error responses</p>
-          <p>✓ Environment-based secrets</p>
+          <p>
+            ✓ Automatic target assessment
+          </p>
+
+          <p>
+            ✓ Authorization gate enabled
+          </p>
+
+          <p>
+            ✓ Scanner catalog loaded
+          </p>
+
+          <p>
+            ✓ Findings normalization
+          </p>
+
+          <p>
+            ✓ SSRF destination filtering
+          </p>
+
+          <p>
+            ✓ Rate limiting
+          </p>
+
+          <p>
+            ✓ Environment-based secrets
+          </p>
 
         </div>
 
@@ -1311,41 +1603,45 @@ function System({
       <div className="panel p-5">
 
         <div className="flex items-center gap-2">
-
-          <Terminal
+          <Bug
             className="text-[#00B8FF]"
           />
 
           <b>Scanner catalog</b>
-
         </div>
 
         <div className="space-y-2 mt-4">
 
-          {catalog.map((s) => (
+          {catalog.map((scanner) => (
             <div
-              key={s.name}
+              key={scanner.name}
               className="flex justify-between border-b border-[#121b22] py-2 text-sm"
             >
 
               <span>
-                {s.name}
+                {scanner.name}
               </span>
 
               <span
                 className={
-                  s.enabled
+                  scanner.enabled !== false
                     ? "text-[#00FF9C]"
                     : "text-slate-600"
                 }
               >
-                {s.enabled
+                {scanner.enabled !== false
                   ? "enabled"
                   : "module"}
               </span>
 
             </div>
           ))}
+
+          {!catalog.length && (
+            <div className="text-sm text-slate-600">
+              Scanner catalog unavailable.
+            </div>
+          )}
 
         </div>
 
@@ -1364,9 +1660,132 @@ function System({
   );
 }
 
-function Empty({
-  text
-}) {
+/* =========================================================
+   LOGIN
+   ========================================================= */
+
+function Auth({ onLogin }) {
+  const [username, setUsername] =
+    useState("");
+
+  const [password, setPassword] =
+    useState("");
+
+  const [err, setErr] =
+    useState("");
+
+  const [busy, setBusy] =
+    useState(false);
+
+  const submit = (e) => {
+    e.preventDefault();
+
+    setErr("");
+
+    setBusy(true);
+
+    setTimeout(() => {
+
+      if (
+        username.trim() === LOGIN_USER &&
+        password === LOGIN_PASS
+      ) {
+        onLogin();
+      } else {
+        setErr(
+          "Invalid username or password."
+        );
+      }
+
+      setBusy(false);
+
+    }, 250);
+  };
+
+  return (
+    <div className="min-h-screen grid place-items-center p-4 grid-bg">
+
+      <form
+        onSubmit={submit}
+        className="panel p-7 w-full max-w-md"
+      >
+
+        <div className="flex gap-3 items-center mb-7">
+
+          <div className="w-10 h-10 bg-[#00FF9C] text-black rounded-lg grid place-items-center">
+            <ShieldCheck />
+          </div>
+
+          <div>
+            <b className="text-lg">
+              NEXO Bug Hunter
+            </b>
+
+            <p className="text-xs text-slate-500">
+              Automated Web Security Intelligence
+            </p>
+          </div>
+
+        </div>
+
+        {err && (
+          <div className="text-red-300 text-sm mb-4 border border-red-500/20 bg-red-500/5 rounded-lg p-3">
+            {err}
+          </div>
+        )}
+
+        <div className="space-y-3">
+
+          <input
+            type="text"
+            autoComplete="username"
+            required
+            placeholder="Username"
+            value={username}
+            onChange={(e) =>
+              setUsername(e.target.value)
+            }
+          />
+
+          <input
+            type="password"
+            autoComplete="current-password"
+            required
+            placeholder="Password"
+            value={password}
+            onChange={(e) =>
+              setPassword(e.target.value)
+            }
+          />
+
+          <button
+            className="btn btn-primary w-full"
+            disabled={busy}
+          >
+            {busy
+              ? "Authenticating…"
+              : "Login"}
+          </button>
+
+        </div>
+
+        <div className="mt-5 text-center">
+          <span className="text-[10px] mono text-slate-600">
+            NEXO SECURITY CONSOLE
+          </span>
+        </div>
+
+      </form>
+
+    </div>
+  );
+}
+
+/* =========================================================
+   EMPTY
+   ========================================================= */
+
+function Empty({ text }) {
   return (
     <div className="text-center py-10 text-slate-600 text-sm">
       {text}
@@ -1374,9 +1793,9 @@ function Empty({
   );
 }
 
-function Root() {
-  return <App />;
-}
+/* =========================================================
+   START APPLICATION
+   ========================================================= */
 
 createRoot(
   document.getElementById("root")
