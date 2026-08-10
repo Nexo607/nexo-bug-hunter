@@ -1,0 +1,2 @@
+# nexo-bug-hunter
+Hunterbug
