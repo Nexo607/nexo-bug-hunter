@@ -1,0 +1,30 @@
+services:
+- type: web
+  name: nexo-bug-hunter-api
+  runtime: docker
+  rootDir: backend
+  healthCheckPath: /api/health
+  envVars:
+  - key: DATABASE_URL
+    fromDatabase: {name: nexo-db, property: connectionString}
+  - key: SECRET_KEY
+    generateValue: true
+  - key: JWT_SECRET
+    generateValue: true
+  - key: CORS_ORIGINS
+    sync: false
+  - key: LOGIN_USERNAME
+    value: Nexo
+  - key: LOGIN_PASSWORD
+    sync: false
+- type: web
+  name: nexo-bug-hunter-ui
+  runtime: docker
+  rootDir: frontend
+  envVars:
+  - key: VITE_API_URL
+    sync: false
+databases:
+- name: nexo-db
+  databaseName: nexo
+  user: nexo
